@@ -1,45 +1,41 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.XR.OpenXR.Input;
 
-public class Teleportation : MonoBehaviour
+public class OpenXRTeleport : MonoBehaviour
 {
-    public Transform player; // The player object (headset position)
-    public OVRInput.Button teleportButton = OVRInput.Button.PrimaryIndexTrigger; // Teleport button
+    public Transform player; // Player or XR Rig
+    public LayerMask teleportLayer; // Layer for valid teleport areas
+    public float maxTeleportDistance = 10.0f; // Max distance for teleportation
 
-    public LayerMask teleportLayer; // Layer mask for valid teleport zones
-    public float maxTeleportDistance = 10.0f; // Max teleport distance
-    private LineRenderer lineRenderer; // Visual cue for the teleport beam
+    private InputAction teleportAction;
+    private LineRenderer lineRenderer;
     private bool isAiming = false;
 
-    void Start()
+    void Awake()
     {
-        // Initialize the line renderer for teleport aim visuals
+        // Initialize the line renderer for visual feedback
         lineRenderer = gameObject.AddComponent<LineRenderer>();
         lineRenderer.positionCount = 2;
         lineRenderer.enabled = false;
+
+        // Initialize the teleport action
+        teleportAction = new InputAction("Teleport", binding: "<XRController>{RightHand}/trigger");
+        teleportAction.Enable();
     }
 
     void Update()
     {
-        HandleTeleportation();
-    }
+        // Check if the teleport button is pressed
+        if (teleportAction.triggered)
+        {
+            isAiming = !isAiming; // Toggle aiming
+            lineRenderer.enabled = isAiming;
 
-    void HandleTeleportation()
-    {
-        // Check if teleport button is pressed
-        if (OVRInput.GetDown(teleportButton))
-        {
-            isAiming = true;
-            lineRenderer.enabled = true;
-        }
-        else if (OVRInput.GetUp(teleportButton) && isAiming)
-        {
-            // Perform the teleport when the button is released
-            PerformTeleport();
-            isAiming = false;
-            lineRenderer.enabled = false;
+            if (!isAiming) PerformTeleport(); // Teleport on release
         }
 
-        // Visualize the teleport aim line
+        // Show teleport line when aiming
         if (isAiming)
         {
             VisualizeTeleport();
@@ -51,21 +47,20 @@ public class Teleportation : MonoBehaviour
         Ray ray = new Ray(transform.position, transform.forward);
         RaycastHit hit;
 
-        // Cast a ray to determine the teleport destination
         if (Physics.Raycast(ray, out hit, maxTeleportDistance, teleportLayer))
         {
-            lineRenderer.SetPosition(0, transform.position); // Start of the teleport line (controller position)
-            lineRenderer.SetPosition(1, hit.point); // End of the teleport line (where the ray hits)
+            lineRenderer.SetPosition(0, transform.position); // Controller position
+            lineRenderer.SetPosition(1, hit.point); // Teleport point
 
-            lineRenderer.material.color = Color.green; // Valid teleport location
+            lineRenderer.material.color = Color.green; // Valid target indicator
         }
         else
         {
-            // If no valid location is hit, extend the line
+            // Draw the max distance if no valid point is hit
             lineRenderer.SetPosition(0, transform.position);
             lineRenderer.SetPosition(1, transform.position + transform.forward * maxTeleportDistance);
 
-            lineRenderer.material.color = Color.red; // Invalid location
+            lineRenderer.material.color = Color.red; // Invalid target indicator
         }
     }
 
@@ -74,16 +69,12 @@ public class Teleportation : MonoBehaviour
         Ray ray = new Ray(transform.position, transform.forward);
         RaycastHit hit;
 
-        // Perform the raycast again to find the valid teleport location
         if (Physics.Raycast(ray, out hit, maxTeleportDistance, teleportLayer))
         {
-            Vector3 teleportDestination = hit.point;
-
-            // Check if the hit point is within a valid teleport area (teleportLayer)
             if (hit.collider.gameObject.layer == LayerMask.NameToLayer("TeleportArea"))
             {
-                // Move the player to the teleport destination
-                player.position = teleportDestination;
+                // Move player to teleport destination
+                player.position = hit.point;
             }
         }
     }
